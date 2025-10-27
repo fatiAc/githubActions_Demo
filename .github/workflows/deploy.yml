@@ -16,7 +16,7 @@ jobs:
     steps:
       # Step 1: Get the code
       - name: 📥 Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # Step 2: Validate HTML
       - name: 🔍 Validate HTML
@@ -63,7 +63,7 @@ jobs:
 
       # Step 5: Upload artifact (so deploy job can use it)
       - name: ⬆️ Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: website
           path: deploy/
@@ -82,7 +82,7 @@ jobs:
     steps:
       # Step 1: Download the artifact from build job
       - name: ⬇️ Download artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: website
           path: .

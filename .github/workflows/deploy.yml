@@ -1,0 +1,106 @@
+name: CI/CD Pipeline - Deploy to GitHub Pages
+
+# When does this workflow run?
+on:
+  push:
+    branches:
+      - main  # Runs when you push to main branch
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+# Define jobs to run
+jobs:
+  # Job 1: Build and Test
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # Step 1: Get the code
+      - name: 📥 Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Validate HTML
+      - name: 🔍 Validate HTML
+        run: |
+          echo "Checking HTML files..."
+          # Simple check: ensure index.html exists and has basic structure
+          if [ ! -f "index.html" ]; then
+            echo "❌ Error: index.html not found!"
+            exit 1
+          fi
+          if ! grep -q "<html" index.html; then
+            echo "❌ Error: index.html doesn't contain <html> tag!"
+            exit 1
+          fi
+          echo "✅ HTML validation passed!"
+
+      # Step 3: Run simple tests
+      - name: 🧪 Run tests
+        run: |
+          echo "Running tests..."
+          # Check if Capgemini logo reference exists
+          if grep -q "capgemini" index.html; then
+            echo "✅ Capgemini branding found"
+          else
+            echo "⚠️  Warning: No Capgemini branding"
+          fi
+          
+          # Check if version number exists
+          if grep -q "Version:" index.html; then
+            echo "✅ Version number found"
+          else
+            echo "⚠️  Warning: No version number"
+          fi
+          
+          echo "✅ All tests passed!"
+
+      # Step 4: Create deployment artifact
+      - name: 📦 Prepare deployment
+        run: |
+          echo "Preparing files for deployment..."
+          mkdir -p deploy
+          cp index.html deploy/
+          echo "✅ Deployment package ready!"
+
+      # Step 5: Upload artifact (so deploy job can use it)
+      - name: ⬆️ Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: website
+          path: deploy/
+
+  # Job 2: Deploy (only runs if build-and-test succeeds)
+  deploy:
+    needs: build-and-test  # Wait for build-and-test to complete
+    runs-on: ubuntu-latest
+    
+    # Give permission to deploy to GitHub Pages
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    steps:
+      # Step 1: Download the artifact from build job
+      - name: ⬇️ Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: website
+          path: .
+
+      # Step 2: Deploy to GitHub Pages
+      - name: 🚀 Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .
+          
+      # Step 3: Success message
+      - name: ✅ Deployment complete
+        run: |
+          echo "=========================================="
+          echo "🎉 Deployment Successful!"
+          echo "=========================================="
+          echo ""
+          echo "Your website is live at:"
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+          echo ""

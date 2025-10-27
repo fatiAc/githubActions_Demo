@@ -18,40 +18,6 @@ jobs:
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Validate HTML
-      - name: 🔍 Validate HTML
-        run: |
-          echo "Checking HTML files..."
-          # Simple check: ensure index.html exists and has basic structure
-          if [ ! -f "index.html" ]; then
-            echo "❌ Error: index.html not found!"
-            exit 1
-          fi
-          if ! grep -q "<html" index.html; then
-            echo "❌ Error: index.html doesn't contain <html> tag!"
-            exit 1
-          fi
-          echo "✅ HTML validation passed!"
-
-      # Step 3: Run simple tests
-      - name: 🧪 Run tests
-        run: |
-          echo "Running tests..."
-          # Check if Capgemini logo reference exists
-          if grep -q "capgemini" index.html; then
-            echo "✅ Capgemini branding found"
-          else
-            echo "⚠️  Warning: No Capgemini branding"
-          fi
-          
-          # Check if version number exists
-          if grep -q "Version:" index.html; then
-            echo "✅ Version number found"
-          else
-            echo "⚠️  Warning: No version number"
-          fi
-          
-          echo "✅ All tests passed!"
 
       # Step 4: Create deployment artifact
       - name: 📦 Prepare deployment

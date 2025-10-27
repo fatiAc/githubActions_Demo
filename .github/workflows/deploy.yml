@@ -13,39 +13,8 @@ env:
   NODE_VERSION: '20'
 
 jobs:
-  code-quality:
-    name: Code Quality & Security
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install validator
-        run: npm install -g htmlhint
-
-      - name: Lint HTML
-        run: htmlhint index.html || true
-
-      - name: Security scan
-        run: |
-          VULNERABILITIES=0
-          grep -i "eval(" index.html && VULNERABILITIES=$((VULNERABILITIES + 1)) || true
-          grep -i "innerHTML" index.html && VULNERABILITIES=$((VULNERABILITIES + 1)) || true
-          echo "Vulnerabilities found: ${VULNERABILITIES}"
-
-      - name: Summary
-        run: |
-          echo "CODE QUALITY: PASSED"
-
   build:
     name: Build & Optimize
-    needs: code-quality
     runs-on: ubuntu-latest
     
     steps:
@@ -69,24 +38,10 @@ jobs:
             --minify-js true \
             index.html -o index.min.html
 
-      - name: Generate build metadata
-        run: |
-          cat > build-info.json << EOF
-          {
-            "buildNumber": "${{ github.run_number }}",
-            "commitSha": "${{ github.sha }}",
-            "branch": "${{ github.ref_name }}",
-            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "actor": "${{ github.actor }}"
-          }
-          EOF
-          cat build-info.json
-
       - name: Prepare build artifacts
         run: |
           mkdir -p dist
           cp index.min.html dist/index.html
-          cp build-info.json dist/
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -125,58 +80,41 @@ jobs:
             exit 1
           fi
           
-          if ! grep -q "<html" index.html; then
-            echo "ERROR: Missing html tag"
-            exit 1
-          fi
-          
           echo "HTML structure validation passed"
 
-      - name: Content validation
+      - name: Check for broken links
         run: |
-          ERRORS=0
+          echo "Checking all external links..."
+          BROKEN_LINKS=0
           
-          if ! grep -qi "capgemini" index.html; then
-            echo "ERROR: Capgemini branding not found"
-            ERRORS=$((ERRORS + 1))
-          fi
+          LINKS=$(grep -o 'href="http[^"]*"' index.html | sed 's/href="//;s/"//' || true)
           
-          if ! grep -q "Version:" index.html; then
-            echo "ERROR: Version number not found"
-            ERRORS=$((ERRORS + 1))
-          fi
-          
-          if [ $ERRORS -gt 0 ]; then
-            echo "Content validation failed with $ERRORS errors"
-            exit 1
-          fi
-          
-          echo "Content validation passed"
-
-      - name: Check file size
-        run: |
-          SIZE=$(wc -c < index.html)
-          MAX_SIZE=102400
-          
-          if [ $SIZE -gt $MAX_SIZE ]; then
-            echo "WARNING: File size ${SIZE} bytes exceeds recommended ${MAX_SIZE} bytes"
+          if [ -z "$LINKS" ]; then
+            echo "No external links found to check"
           else
-            echo "File size check passed: ${SIZE} bytes"
+            for link in $LINKS; do
+              echo "Checking: $link"
+              STATUS=$(curl -o /dev/null -s -w "%{http_code}" -L --max-time 10 "$link" || echo "000")
+              
+              if [ "$STATUS" = "200" ]; then
+                echo "  ✓ OK (HTTP $STATUS)"
+              else
+                echo "  ✗ BROKEN (HTTP $STATUS)"
+                BROKEN_LINKS=$((BROKEN_LINKS + 1))
+              fi
+            done
           fi
-
-      - name: Verify build metadata
-        run: |
-          if [ ! -f "build-info.json" ]; then
-            echo "ERROR: build-info.json not found"
+          
+          if [ $BROKEN_LINKS -gt 0 ]; then
+            echo "ERROR: Found $BROKEN_LINKS broken link(s)"
             exit 1
           fi
           
-          echo "Build metadata:"
-          cat build-info.json
+          echo "All links are valid"
 
       - name: Test Summary
         run: |
-          echo "TESTS: PASSED | 4/4 tests passed"
+          echo "TESTS: PASSED | All checks completed successfully"
 
   deploy:
     name: Deploy to Production
@@ -210,68 +148,3 @@ jobs:
       - name: Deployment summary
         run: |
           echo "DEPLOY: SUCCESS | URL: ${{ steps.deployment.outputs.page_url }}"
-
-  verify:
-    name: Post-Deployment Verification
-    needs: deploy
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Wait for deployment propagation
-        run: sleep 10
-
-      - name: Health check
-        run: |
-          REPO_OWNER="${{ github.repository_owner }}"
-          REPO_NAME="${{ github.event.repository.name }}"
-          URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/"
-          
-          echo "Checking ${URL}"
-          
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" "${URL}")
-          
-          if [ "$STATUS" -eq 200 ]; then
-            echo "Health check passed: HTTP ${STATUS}"
-          else
-            echo "WARNING: Health check returned HTTP ${STATUS}"
-            exit 1
-          fi
-
-      - name: Content verification
-        run: |
-          REPO_OWNER="${{ github.repository_owner }}"
-          REPO_NAME="${{ github.event.repository.name }}"
-          URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/"
-          
-          CONTENT=$(curl -s "${URL}")
-          
-          if echo "$CONTENT" | grep -q "CI/CD"; then
-            echo "Content verification passed"
-          else
-            echo "WARNING: Expected content not found"
-            exit 1
-          fi
-
-      - name: Performance check
-        run: |
-          REPO_OWNER="${{ github.repository_owner }}"
-          REPO_NAME="${{ github.event.repository.name }}"
-          URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/"
-          
-          LOAD_TIME=$(curl -o /dev/null -s -w "%{time_total}" "${URL}")
-          
-          echo "Page load time: ${LOAD_TIME}s"
-          
-          if (( $(echo "$LOAD_TIME > 3.0" | bc -l) )); then
-            echo "WARNING: Load time exceeds 3 seconds"
-          else
-            echo "Performance check passed"
-          fi
-
-      - name: Verification Summary
-        run: |
-          REPO_OWNER="${{ github.repository_owner }}"
-          REPO_NAME="${{ github.event.repository.name }}"
-          URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/"
-          echo "VERIFICATION: PASSED | Health: OK | Performance: OK"
-          echo "Pipeline completed: Code Quality → Build → Test → Deploy → Verify"

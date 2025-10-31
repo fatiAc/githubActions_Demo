@@ -14,7 +14,7 @@ env:
 
 jobs:
   build:
-    name: Build & Optimize
+    name: Build
     runs-on: ubuntu-latest
     
     steps:
@@ -58,7 +58,7 @@ jobs:
           echo "BUILD: PASSED | Size reduction: ${REDUCTION}% | Build: ${{ github.run_number }}"
 
   test:
-    name: Test Suite
+    name: Test 
     needs: build
     runs-on: ubuntu-latest
     
